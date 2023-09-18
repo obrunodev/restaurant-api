@@ -20,6 +20,17 @@ class Product(Base):
     name = Column(String, index=True)
     price = Column(Float)
 
+# Modelo de dados Pydantic para entrada de produto
+class ProductCreate(BaseModel):
+    name: str
+    price: float
+
+# Modelo de dados Pydantic para saída de produto
+class ProductOut(BaseModel):
+    id: int
+    name: str
+    price: float
+
 # Modelo de comanda para pedidos de restaurante
 class Order(Base):
     __tablename__ = "orders"
@@ -58,13 +69,6 @@ class OrderCreate(BaseModel):
         if product is None:
             raise ValueError("Produto não encontrado")
         return value
-    
-    # def model_dump(self):
-    #     return {
-    #         "table": self.table,
-    #         "product_id": self.product_id,
-    #         "quantity": self.quantity
-    #     }
 
 # Modelo de dados Pydantic para saída de pedido
 class OrderOut(BaseModel):
@@ -73,7 +77,6 @@ class OrderOut(BaseModel):
     product_id: int
     quantity: int
 
-# Rota para criar um pedido
 @app.post("/orders/", response_model=OrderOut)
 def create_order(order: OrderCreate):
     db = SessionLocal()
@@ -84,7 +87,6 @@ def create_order(order: OrderCreate):
     db.close()
     return db_order
 
-# Rota para listar todos os pedidos
 @app.get("/orders/", response_model=list[OrderOut])
 def get_all_orders():
     db = SessionLocal()
@@ -92,7 +94,6 @@ def get_all_orders():
     db.close()
     return orders
 
-# Rota para listar um pedido específico
 @app.get("/orders/{order_id}", response_model=OrderOut)
 def get_order(order_id: int):
     db = SessionLocal()
@@ -102,7 +103,15 @@ def get_order(order_id: int):
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     return order
 
-# Rota para atualizar um pedido
+@app.get("/orders/table/{table_id}", response_model=list[OrderOut])
+def get_orders_by_table(table_id: int):
+    db = SessionLocal()
+    orders = db.query(Order).filter(Order.table == table_id).all()
+    db.close()
+    if orders is None:
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+    return orders
+
 @app.put("/orders/{order_id}", response_model=OrderOut)
 def update_order(order_id: int, order: OrderCreate):
     db = SessionLocal()
@@ -128,21 +137,6 @@ def delete_order(order_id: int):
     db.commit()
     db.close()
     return {"message": "Pedido removido com sucesso"}
-
-# Modelo de dados Pydantic para entrada de produto
-class ProductCreate(BaseModel):
-    name: str
-    price: float
-
-# Modelo de dados Pydantic para saída de produto
-class ProductOut(BaseModel):
-    id: int
-    name: str
-    price: float
-
-@app.get("/health-check")
-def health_check():
-    return {"status": "ok"}
 
 @app.post("/products/", response_model=ProductOut)
 def create_product(product: ProductCreate):
@@ -193,3 +187,7 @@ def delete_product(product_id: int):
     db.commit()
     db.close()
     return {"message": "Produto removido com sucesso"}
+
+@app.get("/health-check")
+def health_check():
+    return {"status": "ok"}
