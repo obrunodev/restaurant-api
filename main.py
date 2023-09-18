@@ -11,7 +11,6 @@ DATABASE_URL = "sqlite:///./test.db"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Crie uma classe de modelo usando SQLAlchemy
 Base = declarative_base()
 
 class Product(Base):
@@ -21,7 +20,6 @@ class Product(Base):
     name = Column(String, index=True)
     price = Column(Float)
 
-# Modelo de comanda para pedidos de restaurante
 class Order(Base):
     __tablename__ = "orders"
 
@@ -30,21 +28,25 @@ class Order(Base):
     product_id = Column(Integer, index=True)
     quantity = Column(Integer)
 
+class OrderHistory(Base):
+    __tablename__ = "orders_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    table = Column(Integer, index=True)
+    products = Column(String, index=True)
+
 # Crie a tabela no banco de dados (execute isso uma vez para criar a tabela)
 Base.metadata.create_all(bind=engine)
 
-# Modelo de dados Pydantic para entrada de produto
 class ProductCreate(BaseModel):
     name: str
     price: float
 
-# Modelo de dados Pydantic para saída de produto
 class ProductOut(BaseModel):
     id: int
     name: str
     price: float
 
-# Modelo de dados Pydantic para entrada de pedido
 class OrderCreate(BaseModel):
     table: int
     product_id: int
@@ -71,7 +73,6 @@ class OrderCreate(BaseModel):
             raise ValueError("Produto não encontrado")
         return value
 
-# Modelo de dados Pydantic para saída de pedido
 class OrderOut(BaseModel):
     id: int
     table: int
@@ -82,15 +83,44 @@ class OrderResponse(BaseModel):
     orders: List[OrderOut]
     total_price: float
 
+class OrderHistoryCreate(BaseModel):
+    table: int
+    products: str
+
+class OrderHistoryOut(BaseModel):
+    id: int
+    table: int
+    products: str
+
 @app.post("/orders/", response_model=OrderOut)
 def create_order(order: OrderCreate):
     db = SessionLocal()
+
+    product = db.query(Product).get(order.product_id)
+    if product is None:
+        db.close()
+        raise HTTPException(status_code=400, detail="Produto não encontrado")
+    
     db_order = Order(**order.model_dump())
     db.add(db_order)
     db.commit()
     db.refresh(db_order)
+
+    product_out = ProductOut(
+        id=product.id,
+        name=product.name,
+        price=product.price
+    )
+
+    order_out = OrderOut(
+        id=db_order.id,
+        table=db_order.table,
+        product=product_out,
+        quantity=db_order.quantity
+    )
+
     db.close()
-    return db_order
+    return order_out
 
 @app.get("/orders/", response_model=list[OrderOut])
 def get_all_orders():
@@ -143,7 +173,6 @@ def get_order(order_id: int):
 
     raise HTTPException(status_code=404, detail="Produto não encontrado")
 
-
 @app.get("/orders/table/{table_id}", response_model=OrderResponse)
 def get_orders_by_table(table_id: int):
     db = SessionLocal()
@@ -194,7 +223,6 @@ def update_order(order_id: int, order: OrderCreate):
     db.close()
     return db_order
 
-# Rota para remover um pedido
 @app.delete("/orders/{order_id}")
 def delete_order(order_id: int):
     db = SessionLocal()
@@ -255,6 +283,60 @@ def delete_product(product_id: int):
     db.commit()
     db.close()
     return {"message": "Produto removido com sucesso"}
+
+@app.post("/orders/table/{table_id}")
+def finish_orders_by_table(table_id: int):
+    db = SessionLocal()
+    orders = db.query(Order).filter(Order.table == table_id).all()
+    if not orders:
+        db.close()
+        raise HTTPException(status_code=404, detail="Esta mesa não possui pedidos")
+
+    total_price = 0.0
+    order_list = []
+    for order in orders:
+        product = db.query(Product).get(order.product_id)
+        if product:
+            product_out = ProductOut(
+                id=product.id,
+                name=product.name,
+                price=product.price,
+            )
+            order_out = OrderOut(
+                id=order.id,
+                table=order.table,
+                product=product_out,
+                quantity=order.quantity,
+            )
+            order_list.append(order_out)
+            total_price += product.price * order.quantity
+
+    db.close()
+
+    order_history = OrderHistory(
+        table=table_id,
+        products=', '.join([str(order.product.name) for order in order_list]),
+    )
+
+    db = SessionLocal()
+    db.add(order_history)
+    db.commit()
+    db.close()
+
+    db = SessionLocal()
+    for order in orders:
+        db.delete(order)
+    db.commit()
+    db.close()
+
+    return {"message": "Pedidos finalizado com sucesso"}
+
+@app.get("/orders/history/", response_model=list[OrderHistoryOut])
+def get_all_orders_history():
+    db = SessionLocal()
+    orders = db.query(OrderHistory).all()
+    db.close()
+    return orders
 
 @app.get("/health-check")
 def health_check():
