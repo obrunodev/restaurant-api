@@ -21,17 +21,6 @@ class Product(Base):
     name = Column(String, index=True)
     price = Column(Float)
 
-# Modelo de dados Pydantic para entrada de produto
-class ProductCreate(BaseModel):
-    name: str
-    price: float
-
-# Modelo de dados Pydantic para saída de produto
-class ProductOut(BaseModel):
-    id: int
-    name: str
-    price: float
-
 # Modelo de comanda para pedidos de restaurante
 class Order(Base):
     __tablename__ = "orders"
@@ -43,6 +32,17 @@ class Order(Base):
 
 # Crie a tabela no banco de dados (execute isso uma vez para criar a tabela)
 Base.metadata.create_all(bind=engine)
+
+# Modelo de dados Pydantic para entrada de produto
+class ProductCreate(BaseModel):
+    name: str
+    price: float
+
+# Modelo de dados Pydantic para saída de produto
+class ProductOut(BaseModel):
+    id: int
+    name: str
+    price: float
 
 # Modelo de dados Pydantic para entrada de pedido
 class OrderCreate(BaseModel):
@@ -75,7 +75,7 @@ class OrderCreate(BaseModel):
 class OrderOut(BaseModel):
     id: int
     table: int
-    product_id: int
+    product: ProductOut
     quantity: int
 
 class OrderResponse(BaseModel):
@@ -96,8 +96,27 @@ def create_order(order: OrderCreate):
 def get_all_orders():
     db = SessionLocal()
     orders = db.query(Order).all()
+    
+    order_list = []
+    for order in orders:
+        product = db.query(Product).get(order.product_id)
+        if product:
+            product_out = ProductOut(
+                id=product.id,
+                name=product.name,
+                price=product.price,
+            )
+            order_out = OrderOut(
+                id=order.id,
+                table=order.table,
+                product=product_out,
+                quantity=order.quantity,
+            )
+            order_list.append(order_out)
+
     db.close()
-    return orders
+    
+    return order_list
 
 @app.get("/orders/{order_id}", response_model=OrderOut)
 def get_order(order_id: int):
@@ -106,7 +125,24 @@ def get_order(order_id: int):
     db.close()
     if order is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
-    return order
+
+    product = db.query(Product).get(order.product_id)
+    if product:
+        product_out = ProductOut(
+                id=product.id,
+                name=product.name,
+                price=product.price,
+            )
+        order_out = OrderOut(
+            id=order.id,
+            table=order.table,
+            product=product_out,
+            quantity=order.quantity,
+        )
+        return order_out
+
+    raise HTTPException(status_code=404, detail="Produto não encontrado")
+
 
 @app.get("/orders/table/{table_id}", response_model=OrderResponse)
 def get_orders_by_table(table_id: int):
@@ -121,10 +157,15 @@ def get_orders_by_table(table_id: int):
     for order in orders:
         product = db.query(Product).get(order.product_id)
         if product:
+            product_out = ProductOut(
+                id=product.id,
+                name=product.name,
+                price=product.price,
+            )
             order_out = OrderOut(
                 id=order.id,
                 table=order.table,
-                product_id=order.product_id,
+                product=product_out,
                 quantity=order.quantity,
             )
             order_list.append(order_out)
