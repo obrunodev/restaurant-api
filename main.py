@@ -3,6 +3,7 @@ from pydantic import BaseModel, validator
 from sqlalchemy import create_engine, Column, Integer, String, Float
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from typing import List
 
 app = FastAPI()
 
@@ -77,6 +78,10 @@ class OrderOut(BaseModel):
     product_id: int
     quantity: int
 
+class OrderResponse(BaseModel):
+    orders: List[OrderOut]
+    total_price: float
+
 @app.post("/orders/", response_model=OrderOut)
 def create_order(order: OrderCreate):
     db = SessionLocal()
@@ -103,14 +108,36 @@ def get_order(order_id: int):
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     return order
 
-@app.get("/orders/table/{table_id}", response_model=list[OrderOut])
+@app.get("/orders/table/{table_id}", response_model=OrderResponse)
 def get_orders_by_table(table_id: int):
     db = SessionLocal()
     orders = db.query(Order).filter(Order.table == table_id).all()
-    db.close()
     if orders is None:
+        db.close()
         raise HTTPException(status_code=404, detail="Mesa não encontrada")
-    return orders
+
+    total_price = 0.0
+    order_list = []
+    for order in orders:
+        product = db.query(Product).get(order.product_id)
+        if product:
+            order_out = OrderOut(
+                id=order.id,
+                table=order.table,
+                product_id=order.product_id,
+                quantity=order.quantity,
+            )
+            order_list.append(order_out)
+            total_price += product.price * order.quantity
+
+    db.close()
+    
+    response_data = {
+        "orders": order_list,
+        "total_price": total_price
+    }
+    
+    return OrderResponse(**response_data)
 
 @app.put("/orders/{order_id}", response_model=OrderOut)
 def update_order(order_id: int, order: OrderCreate):
