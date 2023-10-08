@@ -1,13 +1,17 @@
-from app.db import SessionLocal
-from app.models.products import Product, ProductOut, ProductCreate
+from app.db.connection import Session
+from app.db.models import Product
+from app.schemas.products import ProductCreate, ProductOut
 
 from fastapi import APIRouter, HTTPException
 
-router = APIRouter()
+from typing import List
+
+router = APIRouter(tags=["Produtos"])
+
 
 @router.post("/products/", response_model=ProductOut)
 def create_product(product: ProductCreate):
-    db = SessionLocal()
+    db = Session()
     db_product = Product(**product.model_dump())
     db.add(db_product)
     db.commit()
@@ -15,25 +19,28 @@ def create_product(product: ProductCreate):
     db.close()
     return db_product
 
-@router.get("/products/", response_model=list[ProductOut])
+
+@router.get("/products/", response_model=List[ProductOut])
 def get_all_products():
-    db = SessionLocal()
+    db = Session()
     products = db.query(Product).all()
     db.close()
     return products
 
+
 @router.get("/products/{product_id}", response_model=ProductOut)
 def get_product(product_id: int):
-    db = SessionLocal()
+    db = Session()
     product = db.query(Product).filter(Product.id == product_id).first()
     db.close()
     if product is None:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     return product
 
+
 @router.put("/products/{product_id}", response_model=ProductOut)
 def update_product(product_id: int, product: ProductCreate):
-    db = SessionLocal()
+    db = Session()
     db_product = db.query(Product).filter(Product.id == product_id).first()
     if db_product is None:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
@@ -44,9 +51,10 @@ def update_product(product_id: int, product: ProductCreate):
     db.close()
     return db_product
 
+
 @router.delete("/products/{product_id}")
 def delete_product(product_id: int):
-    db = SessionLocal()
+    db = Session()
     db_product = db.query(Product).filter(Product.id == product_id).first()
     if db_product is None:
         raise HTTPException(status_code=404, detail="Produto não encontrado")

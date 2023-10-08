@@ -1,22 +1,11 @@
-from app.db import SessionLocal, engine
-from app.models.products import Product, ProductOut
+from app.db.connection import Session
+from app.db.models import Product
+from app.schemas.products import ProductOut
 
 from pydantic import BaseModel, validator
 
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer
-
 from typing import List
 
-Base = declarative_base()
-
-class Order(Base):
-    __tablename__ = "orders"
-
-    id = Column(Integer, primary_key=True, index=True)
-    table = Column(Integer, index=True)
-    product_id = Column(Integer, index=True)
-    quantity = Column(Integer)
 
 class OrderCreate(BaseModel):
     table: int
@@ -37,7 +26,7 @@ class OrderCreate(BaseModel):
     
     @validator("product_id")
     def product_id_must_exist(cls, value):
-        db = SessionLocal()
+        db = Session()
         product = db.query(Product).filter(Product.id == value).first()
         db.close()
         if product is None:
@@ -53,5 +42,3 @@ class OrderOut(BaseModel):
 class OrderResponse(BaseModel):
     orders: List[OrderOut]
     total_price: float
-
-Base.metadata.create_all(bind=engine)

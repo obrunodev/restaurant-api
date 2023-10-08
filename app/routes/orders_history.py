@@ -1,13 +1,17 @@
-from app.db import SessionLocal
-from app.models.orders_history import OrderHistory, OrderHistoryOut
+from app.db.connection import Session
+from app.db.models import OrderHistory
+from app.schemas.orders_history import OrderHistoryOut
 
 from fastapi import APIRouter
 
-router = APIRouter()
+from typing import List
 
-@router.get("/orders/history/", response_model=list[OrderHistoryOut])
+router = APIRouter(tags=["Histórico de pedidos"])
+
+
+@router.get("/orders/history/", response_model=List[OrderHistoryOut])
 def get_all_orders_history():
-    db = SessionLocal()
+    db = Session()
     orders = db.query(OrderHistory).all()
     db.close()
     return orders

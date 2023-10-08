@@ -1,15 +1,17 @@
-from app.db import SessionLocal
-from app.models.orders import Order, OrderCreate, OrderOut, OrderResponse
-from app.models.orders_history import OrderHistory
-from app.models.products import Product, ProductOut
+from app.db.models import Product, Order, OrderHistory
+from app.schemas.orders import OrderCreate, OrderOut, OrderResponse, ProductOut
+from app.db.connection import Session
 
 from fastapi import APIRouter, HTTPException
 
-router = APIRouter()
+from typing import List
+
+router = APIRouter(tags=["Pedidos"])
+
 
 @router.post("/orders/", response_model=OrderOut)
 def create_order(order: OrderCreate):
-    db = SessionLocal()
+    db = Session()
 
     product = db.query(Product).get(order.product_id)
     if product is None:
@@ -37,9 +39,10 @@ def create_order(order: OrderCreate):
     db.close()
     return order_out
 
-@router.get("/orders/", response_model=list[OrderOut])
+
+@router.get("/orders/", response_model=List[OrderOut])
 def get_all_orders():
-    db = SessionLocal()
+    db = Session()
     orders = db.query(Order).all()
     
     order_list = []
@@ -63,9 +66,10 @@ def get_all_orders():
     
     return order_list
 
+
 @router.get("/orders/{order_id}", response_model=OrderOut)
 def get_order(order_id: int):
-    db = SessionLocal()
+    db = Session()
     order = db.query(Order).filter(Order.id == order_id).first()
     db.close()
     if order is None:
@@ -88,9 +92,10 @@ def get_order(order_id: int):
 
     raise HTTPException(status_code=404, detail="Produto não encontrado")
 
+
 @router.get("/orders/table/{table_id}", response_model=OrderResponse)
 def get_orders_by_table(table_id: int):
-    db = SessionLocal()
+    db = Session()
     orders = db.query(Order).filter(Order.table == table_id).all()
     if orders is None:
         db.close()
@@ -124,9 +129,10 @@ def get_orders_by_table(table_id: int):
     
     return OrderResponse(**response_data)
 
+
 @router.put("/orders/{order_id}", response_model=OrderOut)
 def update_order(order_id: int, order: OrderCreate):
-    db = SessionLocal()
+    db = Session()
     db_order = db.query(Order).filter(Order.id == order_id).first()
     if db_order is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
@@ -138,9 +144,10 @@ def update_order(order_id: int, order: OrderCreate):
     db.close()
     return db_order
 
+
 @router.delete("/orders/{order_id}")
 def delete_order(order_id: int):
-    db = SessionLocal()
+    db = Session()
     db_order = db.query(Order).filter(Order.id == order_id).first()
     if db_order is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
@@ -149,9 +156,10 @@ def delete_order(order_id: int):
     db.close()
     return {"message": "Pedido removido com sucesso"}
 
+
 @router.post("/orders/table/{table_id}")
 def finish_orders_by_table(table_id: int):
-    db = SessionLocal()
+    db = Session()
     orders = db.query(Order).filter(Order.table == table_id).all()
     if not orders:
         db.close()
@@ -183,12 +191,12 @@ def finish_orders_by_table(table_id: int):
         products=', '.join([str(order.product.name) for order in order_list]),
     )
 
-    db = SessionLocal()
+    db = Session()
     db.add(order_history)
     db.commit()
     db.close()
 
-    db = SessionLocal()
+    db = Session()
     for order in orders:
         db.delete(order)
     db.commit()
